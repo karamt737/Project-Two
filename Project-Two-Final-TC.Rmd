@@ -1,0 +1,306 @@
+---
+title: "Project-Two"
+author: "Tata Coulibaly"
+date: "3/15/2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = normalizePath("C:/Users/Tata/Documents/560/"))
+```
+
+
+```{r}
+#load the mlbench package which has the BreastCancer data set
+
+require(mlbench)
+
+# if you don't have any required package, use the install.packages() command
+# load the data set
+data(BreastCancer)
+
+str(BreastCancer)
+
+BreastCancer$Cl.thickness<-as.integer(BreastCancer$Cl.thickness)
+BreastCancer$Cell.size<-as.integer(BreastCancer$Cell.size)
+BreastCancer$Cell.shape<-as.integer(BreastCancer$Cell.shape)
+BreastCancer$Marg.adhesion<-as.integer(BreastCancer$Marg.adhesion)
+BreastCancer$Epith.c.size<-as.integer(BreastCancer$Epith.c.size)
+BreastCancer$Bare.nuclei<-as.integer(BreastCancer$Bare.nuclei)
+BreastCancer$Bl.cromatin<-as.integer(BreastCancer$Bl.cromatin)
+BreastCancer$Normal.nucleoli<-as.integer(BreastCancer$Normal.nucleoli)
+BreastCancer$Mitoses<-as.integer(BreastCancer$Mitoses)
+
+
+# some algorithms don't like missing values, so removing rows with missing values
+BreastCancer <- na.omit(BreastCancer) 
+
+# remove the unique identifier, which is useless and would confuse the machine learning algorithms
+BreastCancer$Id <- NULL 
+
+
+# partition the data set for 80% training and 20% evaluation (adapted from ?randomForest)
+set.seed(2)
+
+ind <- sample(2, nrow(BreastCancer), replace = TRUE, prob=c(0.8, 0.2))
+
+```
+
+
+
+```{r}
+# Graphical Representation - 
+
+#Descriptive Stats - Graphical Representation
+
+doPlots <- function(data_in, fun, ii, ncol=3) {
+  pp <- list()
+  for (i in ii) {
+    p <- fun(data_in=data_in, i=i)
+    pp <- c(pp, list(p))
+  }
+  do.call("grid.arrange", c(pp, ncol=ncol))
+}
+doPlots
+
+plotDen <- function(data_in, i){
+  data <- data.frame(x=data_in[[i]], rain_pred = data_in$Class)
+  p <- ggplot(data= data) + geom_line(aes(x = x), stat = 'density', size = 1,alpha = 1.0) +
+    xlab(paste0((colnames(data_in)[i]), '\n', 'Skewness: ',round(skewness(data_in[[i]] ,na.rm = TRUE), 2),'  Kurtosis: ',round(kurtosis(data_in[[i]] ,na.rm = TRUE), 2))) + theme_light() 
+  return(p)
+}
+
+plotbox <- function(data_in, i){
+  data <- data.frame(y=data_in[[i]], class = data_in$Class)
+  p <- ggplot(data= data) +geom_boxplot(color='black',data = data, aes(x=class, y=y))+
+    ylab(paste0((colnames(data_in)[i]))) + theme_light() 
+  return(p)
+}
+
+# All required library
+load.libraries <- c('data.table','Hmisc','testthat', 'gridExtra', 'corrplot', 'GGally', 'ggplot2', 'e1071', 'dplyr','car','caTools','ROCR')
+
+
+# Install package that is not present
+install.lib <- load.libraries[!load.libraries %in% installed.packages()]
+for(libs in install.lib) install.packages(libs, dependences = TRUE)
+#Load all packages
+sapply(load.libraries, require, character = TRUE)
+
+#Histogram Plot
+
+ggplot(BreastCancer,aes(x=Class))+geom_bar()
+
+```
+
+#Here we see the class broken down into 2 categories benign and malignant. Based on the height of the plots, we see that the benign 
+#class is superior to the malignant class.
+
+```{r}
+#Density Plots
+colnames(BreastCancer)
+str(BreastCancer)
+
+doPlots(BreastCancer, fun = plotDen, ii = 2:10, ncol = 5)
+
+#Box Plots
+doPlots(BreastCancer, fun = plotbox, ii = 2:10, ncol = 5)
+```
+
+##In these density plots, we are seeing the distribution of the variables. Cell.size, Cell.shape, Marg.adhesion, Normal.nucleoli, Mitoses show the same pattern with the combination of high and low values. Epic c.size, BI cromatin seem to show a wide range of values.By analysing the density plots of all the independent variables we can clearly see bimodal plots. Most of the variables indicating two distributions one at lower end and another at higher end. With respect to class we see the distribution with higher values happen more often in the case of class malignant while distribution at the lower value can be indicative of the benogn class. We also see similar distribution for multiple variables corresponding to a high correlation exist between them.
+
+
+```{r}
+corr <-cor(BreastCancer[,c(2:9)])
+
+library(corrplot)
+
+corrplot(corr, method ="number")
+corrplot(corr)
+
+```
+#In this correlation matrix, we see a strong correlation between Cell.shape and Cell.size, BI cromatin and cell.size, Normal.nucleoli and cell.size, BI cromatin and cell.shape, Normal.nucleoli and cell.shape.
+
+
+```{r}
+# create model using recursive partitioning on the training data set
+require(rpart)
+
+x.rp <- rpart(Class ~ ., data=BreastCancer[ind == 1,c(2:10)])
+summary(x.rp)
+str(BreastCancer)
+newdata=BreastCancer[ind == 2,]
+# predict classes for the evaluation data set
+x.rp.pred <- predict(x.rp, type="class", newdata=BreastCancer[ind == 2,c(2:10)])
+
+# score the evaluation data set (extract the probabilities)
+x.rp.prob <- predict(x.rp, type="prob", newdata=BreastCancer[ind == 2,c(2:10)])
+
+# To view the decision tree, uncomment this line.
+plot(x.rp, main="Decision tree created using rpart")
+text(x.rp)
+
+data=BreastCancer[ind == 1,]
+summary(data[(data$Cell.size<3.5),"Class"])
+```
+## With the 7 nodes, we are seeing a classification of malignant vs benign. Based on the results, we can conclude that cell size, Bare.nuclei, Cell.shape BI.cromatin, Epith.c.size are the key variables helping us predict the type of class.
+
+
+```{r}
+# create model using conditional inference trees
+require(party)
+
+x.ct <- ctree(Class ~ ., data=BreastCancer[ind == 1,c(2:10)])
+
+x.ct.pred <- predict(x.ct, newdata=BreastCancer[ind == 2,c(2:10)])
+x.ct.prob <-  1- unlist(treeresponse(x.ct, BreastCancer[ind == 2,c(2:10)]), use.names=F)[seq(1,nrow(BreastCancer[ind == 2,])*2,2)]
+
+# To view the decision tree, uncomment this line.
+ plot(x.ct, main="Decision tree created using condition inference trees")
+
+ 
+# create model using random forest and bagging ensemble using conditional inference trees
+ 
+x.cf <- cforest(Class ~ ., data=BreastCancer[ind == 1,c(2:10)], control = cforest_unbiased(mtry = ncol(BreastCancer)-2))
+
+summary(x.cf)
+
+x.cf.pred <- predict(x.cf, newdata=BreastCancer[ind == 2,c(2:10)])
+x.cf.prob <-  1- unlist(treeresponse(x.cf, BreastCancer[ind == 2,c(2:10)]), use.names=F)[seq(1,nrow(BreastCancer[ind == 2,])*2,2)]
+
+data=BreastCancer[ind == 1,]
+summary(data[(data$Cell.size<=3)&(data$Bare.nuclei<=2),"Class"])
+```
+## This conditional inference tree is predicting the different classes based on variables that are highly significant. The bar charts are showing the splits between benign and malignant at each leaf node.
+
+
+```{r}
+# create model using bagging (bootstrap aggregating)
+require(ipred)
+x.ip <- bagging(Class ~ ., data=BreastCancer[ind == 1,c(2:10)])
+x.ip.prob <- predict(x.ip, type="prob", newdata=BreastCancer[ind == 2,c(2:10)])
+
+# create model using svm (support vector machine)
+require(e1071)
+
+# svm requires tuning
+x.svm.tune <- tune(svm, Class~., data = BreastCancer[ind == 1,c(2:10)],
+                   ranges = list(gamma = 2^(-8:1), cost = 2^(0:4)),
+                   tunecontrol = tune.control(sampling = "fix"))
+
+# display the tuning results (in text format)
+x.svm.tune
+
+# If the tuning results are on the margin of the parameters (e.g., gamma = 2^-8), 
+# then widen the parameters.
+# I manually copied the cost and gamma from console messages above to parameters below.
+
+x.svm <- svm(Class~., data = BreastCancer[ind == 1,c(2:10)], cost=8, gamma=0.0625, probability = TRUE)
+
+x.svm.prob <- predict(x.svm, type="prob", newdata=BreastCancer[ind == 2,c(2:10)], probability = TRUE)
+
+svm_pred<- attr(x.svm.prob,"probabilities")[,2]
+names(svm_pred)<-NULL
+
+
+```
+
+
+
+```{r}
+## plot ROC curves to compare the performance of the individual classifiers
+##
+
+# Output the plot to a PNG file for display on web.  To draw to the screen, 
+# comment this line out.
+#png(filename="roc_curve_5_models.png", width=700, height=700)
+
+# load the ROCR package which draws the ROC curves
+require(ROCR)
+
+# create an ROCR prediction object from rpart() probabilities
+x.rp.prob.rocr <- prediction(x.rp.prob[,2], BreastCancer[ind == 2,'Class'])
+
+# prepare an ROCR performance object for ROC curve (tpr=true positive rate, fpr=false positive rate)
+x.rp.perf <- performance(x.rp.prob.rocr, "tpr","fpr")
+
+# plot it
+plot(x.rp.perf, col=2, main="ROC curves comparing classification performance of five machine learning models")
+
+# Draw a legend.
+legend(0.6, 0.6, c('rpart', 'ctree', 'cforest','bagging','svm'), 2:6)
+
+# ctree
+x.ct.prob.rocr <- prediction(x.ct.prob, BreastCancer[ind == 2,'Class'])
+x.ct.perf <- performance(x.ct.prob.rocr, "tpr","fpr")
+# add=TRUE draws on the existing chart 
+plot(x.ct.perf, col=3, add=TRUE)
+
+
+# cforest
+x.cf.prob.rocr <- prediction(x.cf.prob, BreastCancer[ind == 2,'Class'])
+x.cf.perf <- performance(x.cf.prob.rocr, "tpr","fpr")
+plot(x.cf.perf, col=4, add=TRUE)
+
+# bagging
+x.ip.prob.rocr <- prediction(x.ip.prob[,2], BreastCancer[ind == 2,'Class'])
+x.ip.perf <- performance(x.ip.prob.rocr, "tpr","fpr")
+plot(x.ip.perf, col=5, add=TRUE)
+
+
+# svm
+
+x.svm.prob.rocr <- prediction(svm_pred, BreastCancer[ind == 2,'Class'])
+x.svm.perf <- performance(x.svm.prob.rocr, "tpr","fpr")
+plot(x.svm.perf, col=6, add=TRUE)
+
+```
+
+#The ROC (Receiver operating Characteristics Curve) shows the variation of true positive rate with respect to false positive rates in a model. It helps deciding the threshold probability to predict a class. Here we can see for most of the model the benchmark is at around 0.8 to 0.9. We conclude that 0.85 can be a probabilistic threshold to predict the class.
+
+
+
+```{r}
+#Develop an ensemble that will combine 5 classifiers
+#Use the majority rule using the stacking 
+
+
+Final_prediction<- data.frame(cbind(x.ip.prob[,2],x.cf.prob,x.ct.prob,x.rp.prob[,2],svm_pred))
+
+
+colnames(Final_prediction)<- c("ip","cf","ct","rp","svm")
+
+
+
+#Average Probabilities
+Final_prediction$avg_prob<- (Final_prediction$ip+Final_prediction$cf+Final_prediction$ct+Final_prediction$rp+Final_prediction$svm)/5
+
+
+final.prob.rocr <- prediction(Final_prediction$avg_prob, BreastCancer[ind == 2,'Class'])
+
+final.perf <- performance(x.svm.prob.rocr, "tpr","fpr")
+plot(final.perf )
+
+
+Final_prediction$pred_class<-as.factor(ifelse(Final_prediction$avg_prob>0.85,"malignant","benign"))
+
+Final_prediction$actual_class<-as.factor(BreastCancer[ind == 2,'Class'])
+
+```
+## This ROC plot is a final combination of all 5 classifiers. It is designed to provide a more accurate prediction of the classes.0.85 can be a probabilistic thresold to predict the class.
+
+```{r}
+Final_prediction
+library(caret)
+confusionMatrix(Final_prediction$actual_class,Final_prediction$pred_class)
+```
+## With the confusion matrix, our model does a good job at predicting the class with a 93% accuracy. Also, to lower the risk of false negative we are focusing more on getting a real good score for sensitivity which for our model is at 94%. 
+
+
+
+
+
+
