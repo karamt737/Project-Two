@@ -1,6 +1,5 @@
 ---
 title: "Project-Two"
-author: "Tata Coulibaly"
 date: "3/15/2021"
 output:
   word_document: default
